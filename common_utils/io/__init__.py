@@ -1,5 +1,6 @@
 import csv
 import pickle
+import json
 import logging
 
 
@@ -8,10 +9,10 @@ def load_pickle(filename):
         with open(str(filename), 'rb') as f:
             obj = pickle.load(f)
 
-        logging.info('Loaded: %s', filename)
+        logging.info(f'Loaded: {filename}')
 
     except EOFError:
-        logging.warning('Cannot load: %s', filename)
+        logging.warning(f'Cannot load: {filename}')
         obj = None
 
     return obj
@@ -21,7 +22,7 @@ def save_pickle(filename, obj):
     with open(str(filename), 'wb') as f:
         pickle.dump(obj, f)
 
-    logging.info('Saved: %s', filename)
+    logging.info(f'Saved: {filename}')
 
 
 def save_csv(filename, data, fieldnames=None, flush=False):
@@ -40,7 +41,7 @@ def save_csv(filename, data, fieldnames=None, flush=False):
                 writer.writerow(row)
                 f.flush()
 
-    logging.info('Saved: %s', filename)
+    logging.info(f'Saved: {filename}')
 
 
 def load_csv(filename, header=True):
@@ -52,7 +53,7 @@ def load_csv(filename, header=True):
 
         rows = [r for r in reader]
 
-    logging.info('Loaded: %s', filename)
+    logging.info(f'Loaded: {filename}')
     return rows
 
 
@@ -61,5 +62,14 @@ def load_lines(filename):
         lines = [l.strip() for l in f]
         lines = [l for l in lines if len(l) != 0]
 
-    logging.info('Loaded: %s', filename)
+    logging.info(f'Loaded: {filename}')
     return lines
+
+
+def load_json(filename):
+    with open(str(filename), 'rb') as f:
+        obj = json.load(f)
+
+    logging.info(f'Loaded: {filename}')
+
+    return obj
