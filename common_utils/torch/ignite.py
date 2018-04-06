@@ -4,56 +4,61 @@ from datetime import datetime
 import numpy as np
 import torch
 
-from ignite.engine import Events
 from ignite.metrics import Metric
-from ignite.trainer import Trainer
-
 import losswise
 
 from common_utils.misc import tuplify
 from common_utils.torch.helpers import variable, save_weights
 
 
-class UpdateFunction(object):
-    def __init__(self, model, criterion, optimizer=None):
+class InferenceFunction(object):
+    def __init__(self, model):
         self.model = model
-        self.criterion = criterion
-        self.optimizer = optimizer
 
-        self._iteration = 0
-
-    def backward_completed_callback(self):
-        return
-
-    def __call__(self, batch):
-        self._iteration += 1
-
-        if self.optimizer is not None:
-            self.model.train()
-            self.optimizer.zero_grad()
-        else:
-            self.model.eval()
-
+    def _forward_pass(self, batch):
         batch = variable(batch)
-        inputs, targets = batch
 
+        inputs, targets = batch
         inputs = tuplify(inputs)
         targets = tuplify(targets)
 
         outputs = self.model(*inputs)
+
         outputs = tuplify(outputs)
+
+        return outputs, targets
+
+    def __call__(self, engine, batch):
+        self.model.eval()
+
+        outputs, _ = self._forward_pass(batch)
+
+        return outputs
+
+
+class UpdateFunction(InferenceFunction):
+    def __init__(self, criterion, optimizer, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.criterion = criterion
+        self.optimizer = optimizer
+
+    def backward_completed_callback(self):
+        return
+
+    def __call__(self, engine, batch):
+        self.model.train()
+        self.optimizer.zero_grad()
+
+        outputs, targets = self._forward_pass(batch)
 
         losses = self.criterion(*outputs, *targets)
         losses = tuplify(losses)
-
         loss_total = sum(losses)
 
-        if self.optimizer is not None:
-            loss_total.backward()
-
-            self.backward_completed_callback()
-
-            self.optimizer.step()
+        loss_total.backward()
+        self.backward_completed_callback()
+        self.optimizer.step()
 
         losses_values = [float(l) for l in losses]
         if len(losses_values) == 0:
@@ -106,20 +111,6 @@ class LossAggregator(Metric):
 
         return losses
 
-    def completed(self, engine, state, name):
-        if not hasattr(state, 'metrics'):
-            state.metrics = {}
-
-        super().completed(engine, state, name)
-
-    def attach(self, engine, name):
-        if isinstance(engine, Trainer):
-            engine.add_event_handler(Events.EPOCH_STARTED, self.started)
-            engine.add_event_handler(Events.ITERATION_COMPLETED, self.iteration_completed)
-            engine.add_event_handler(Events.EPOCH_COMPLETED, self.completed, name)
-        else:
-            super().attach(engine, name)
-
 
 class LosswiseLogger(object):
     def __init__(self, api_key, metric_name, model_name=None, model_params=None):
@@ -131,17 +122,20 @@ class LosswiseLogger(object):
         self._session = losswise.Session(tag=model_name, params=model_params)
         self._graph = self._session.graph('loss', kind='min')
 
-        self._epoch = 0
+    def _extract_losses(self, engine, prefix):
+        losses = engine.state.metrics[self.metric_name]
+        losses = {f'{prefix}_{l}': v for l, v in losses.items()}
+        return losses
 
-    def __call__(self, engine, state, mode):
-        if mode == 'train':
-            self._epoch += 1
+    def __call__(self, engine_train, engine_val=None):
+        epoch = engine_train.state.epoch
 
-        losses = state.metrics[self.metric_name]
+        losses = self._extract_losses(engine_train, 'train')
+        if engine_val is not None:
+            losses_val = self._extract_losses(engine_val, 'val')
+            losses.update(**losses_val)
 
-        losses = {f'{mode}_{l}': v for l, v in losses.items()}
-
-        self._graph.append(self._epoch, losses)
+        self._graph.append(epoch, losses)
 
     def done(self):
         self._session.done()
@@ -160,8 +154,8 @@ class ModelSaver(object):
 
         self._best_loss = np.inf
 
-    def __call__(self, engine, state):
-        losses = state.metrics[self.metric_name]
+    def __call__(self, engine):
+        losses = engine.state.metrics[self.metric_name]
 
         if self.loss_name is None:
             loss_current = sum(losses.values())
@@ -173,75 +167,77 @@ class ModelSaver(object):
             self._best_loss = loss_current
 
 
-class EvaluatorRunner(object):
-    def __init__(self, evaluator, callbacks=None):
-        super().__init__()
+# class SacredInfoCallback(object):
+#     def __init__(self, exp, metric_name):
+#         self.exp = exp
+#         self.metric_name = metric_name
+#
+#         self.exp.info['losses_train'] = []
+#         self.exp.info['losses_val'] = []
+#
+#     def __call__(self, state, state_val):
+#         losses_train = state.metrics[self.metric_name]
+#         losses_val = state_val.metrics[self.metric_name]
+#
+#         self.exp.info['losses_train'].append(losses_train)
+#         self.exp.info['losses_val'].append(losses_val)
+#
 
-        self.evaluator = evaluator
-
-        if callbacks is not None and not isinstance(callbacks, (tuple, list)):
-            callbacks = [callbacks, ]
-        self.callbacks = callbacks
-
-    def __call__(self, engine, state, data):
-        state_val = self.evaluator.run(data)
-
-        if self.callbacks is not None:
-            should_terminate = any(callback(state, state_val) for callback in self.callbacks)
-            if should_terminate:
-                engine.should_terminate = True
-
-
-class EarlyStoppingLossThresholdCallback(object):
-    def __init__(self, threshold, metric_name, loss_name=None):
-        super().__init__()
-
-        self.threshold = threshold
-        self.metric_name = metric_name
-        self.loss_name = loss_name
-
-    def __call__(self, state, state_val):
-        losses = state_val.metrics[self.metric_name]
-
-        if self.loss_name is None:
-            loss_current = sum(losses.values())
-        else:
-            loss_current = losses[self.loss_name]
-
-        should_terminate = loss_current < self.threshold
-
-        return should_terminate
-
-
-class EarlyStoppingElapsedTimeCallback(object):
-    def __init__(self, max_elapsed_time):
-        super().__init__()
-
-        self.max_elapsed_time = max_elapsed_time
-
-        self._time_start = datetime.now()
-
-    def __call__(self, state, state_val):
-        time_now = datetime.now()
-
-        time_delta = time_now - self._time_start
-
-        should_terminate = time_delta > self.max_elapsed_time
-
-        return should_terminate
-
-
-class SacredInfoCallback(object):
-    def __init__(self, exp, metric_name):
-        self.exp = exp
-        self.metric_name = metric_name
-
-        self.exp.info['losses_train'] = []
-        self.exp.info['losses_val'] = []
-
-    def __call__(self, state, state_val):
-        losses_train = state.metrics[self.metric_name]
-        losses_val = state_val.metrics[self.metric_name]
-
-        self.exp.info['losses_train'].append(losses_train)
-        self.exp.info['losses_val'].append(losses_val)
+# class EvaluatorRunner(object):
+#     def __init__(self, evaluator, callbacks=None):
+#         super().__init__()
+#
+#         self.evaluator = evaluator
+#
+#         if callbacks is not None and not isinstance(callbacks, (tuple, list)):
+#             callbacks = [callbacks, ]
+#         self.callbacks = callbacks
+#
+#     def __call__(self, engine, state, data):
+#         state_val = self.evaluator.run(data)
+#
+#         if self.callbacks is not None:
+#             should_terminate = any(callback(state, state_val) for callback in self.callbacks)
+#             if should_terminate:
+#                 engine.should_terminate = True
+#
+#
+# class EarlyStoppingLossThresholdCallback(object):
+#     def __init__(self, threshold, metric_name, loss_name=None):
+#         super().__init__()
+#
+#         self.threshold = threshold
+#         self.metric_name = metric_name
+#         self.loss_name = loss_name
+#
+#     def __call__(self, state, state_val):
+#         losses = state_val.metrics[self.metric_name]
+#
+#         if self.loss_name is None:
+#             loss_current = sum(losses.values())
+#         else:
+#             loss_current = losses[self.loss_name]
+#
+#         should_terminate = loss_current < self.threshold
+#
+#         return should_terminate
+#
+#
+# class EarlyStoppingElapsedTimeCallback(object):
+#     def __init__(self, max_elapsed_time):
+#         super().__init__()
+#
+#         self.max_elapsed_time = max_elapsed_time
+#
+#         self._time_start = datetime.now()
+#
+#     def __call__(self, state, state_val):
+#         time_now = datetime.now()
+#
+#         time_delta = time_now - self._time_start
+#
+#         should_terminate = time_delta > self.max_elapsed_time
+#
+#         return should_terminate
+#
+#

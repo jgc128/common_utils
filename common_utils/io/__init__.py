@@ -67,9 +67,12 @@ def load_lines(filename):
 
 
 def load_json(filename):
-    with open(str(filename), 'rb') as f:
-        obj = json.load(f)
+    try:
+        with open(str(filename), 'rb') as f:
+            obj = json.load(f)
 
-    logging.info(f'Loaded: {filename}')
+        logging.info(f'Loaded: {filename}')
+    except json.decoder.JSONDecodeError:
+        obj = None
 
     return obj
