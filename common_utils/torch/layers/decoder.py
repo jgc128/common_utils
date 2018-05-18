@@ -5,11 +5,12 @@ from common_utils.torch.helpers import variable, argmax
 
 
 class Decoder(torch.nn.Module):
-    def __init__(self, embedding, hidden_size, max_len, init_token, dropout=0.2):
+    def __init__(self, embedding, hidden_size, max_len, init_token, nb_layers=1, dropout=0.2):
         super(Decoder, self).__init__()
 
         self.embedding = embedding
         self.hidden_size = hidden_size
+        self.nb_layers = nb_layers
         self.dropout_prob = dropout
 
         self.max_len = max_len
@@ -17,7 +18,11 @@ class Decoder(torch.nn.Module):
 
         embedding_dim = embedding.weight.size(1)
         vocab_size = embedding.weight.size(0)
-        self.decoder = torch.nn.GRUCell(input_size=embedding_dim, hidden_size=hidden_size)
+        self.decoder_cells = torch.nn.ModuleList([
+            torch.nn.GRUCell(input_size=embedding_dim if i == 0 else hidden_size, hidden_size=hidden_size)
+            for i in range(nb_layers)
+        ])
+
         self.out = torch.nn.Linear(hidden_size, vocab_size)
 
         self.dropout = None
@@ -27,15 +32,24 @@ class Decoder(torch.nn.Module):
     def zero_state(self, batch_size):
         state_shape = (batch_size, self.hidden_size)
 
-        h0 = variable(torch.zeros(*state_shape))
+        h0 = [variable(torch.zeros(*state_shape)) for _ in range(self.nb_layers)]
         return h0
 
     def decoder_state(self, hidden):
-        return hidden
+        return [hidden for _ in range(self.nb_layers)]
 
     def decoder_initial_inputs(self, batch_size):
         inputs = variable(torch.from_numpy(np.full((1,), self.init_token, dtype=np.long)).expand((batch_size,)))
         return inputs
+
+    def _decoder_timestep(self, inputs, hidden):
+        hidden_new = []
+        for i, h_i in enumerate(hidden):
+            h_i_new = self.decoder_cells[i](inputs, h_i)
+            hidden_new.append(h_i_new)
+            inputs = h_i_new
+
+        return hidden_new
 
     def forward(self, hidden, targets=None):
         batch_size = hidden.size(0)
@@ -54,9 +68,10 @@ class Decoder(torch.nn.Module):
             if self.dropout is not None:
                 decoder_inputs = self.dropout(decoder_inputs)
 
-            decoder_hidden = self.decoder(decoder_inputs, decoder_hidden)
+            # decoder_hidden = self.decoder(decoder_inputs, decoder_hidden)
+            decoder_hidden = self._decoder_timestep(decoder_inputs, decoder_hidden)
 
-            decoder_outputs = decoder_hidden
+            decoder_outputs = decoder_hidden[-1]
             if self.dropout is not None:
                 decoder_outputs = self.dropout(decoder_outputs)
 

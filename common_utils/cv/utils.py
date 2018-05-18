@@ -31,3 +31,12 @@ def make_border(image, border_size):
         cv2.BORDER_REFLECT
     )
     return image
+
+
+def resize_with_aspect_ratio(image, target_width, interpolation=cv2.INTER_LINEAR):
+    ratio = image.shape[1] / target_width
+    dsize = (int(image.shape[1] / ratio), int(image.shape[0] / ratio))
+
+    image = cv2.resize(image, dsize, interpolation=interpolation)
+
+    return image

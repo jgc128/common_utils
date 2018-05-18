@@ -44,12 +44,12 @@ def save_csv(filename, data, fieldnames=None, flush=False):
     logging.info(f'Saved: {filename}')
 
 
-def load_csv(filename, header=True):
+def load_csv(filename, as_dict=True, fieldnames=None, delimiter=','):
     with open(str(filename), 'r') as f:
-        if header:
-            reader = csv.DictReader(f)
+        if as_dict:
+            reader = csv.DictReader(f, fieldnames=fieldnames, delimiter=delimiter)
         else:
-            reader = csv.reader(f)
+            reader = csv.reader(f, delimiter=delimiter)
 
         rows = [r for r in reader]
 
@@ -76,3 +76,11 @@ def load_json(filename):
         obj = None
 
     return obj
+
+
+def load_file(filename):
+    with open(filename, 'r') as f:
+        data = f.read()
+
+    logging.info(f'Loaded: {filename}')
+    return data

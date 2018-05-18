@@ -4,19 +4,23 @@ from common_utils.torch.helpers import variable
 
 
 class RNNEncoder(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, bidirectional=False, return_sequence=False):
+    def __init__(self, input_size, hidden_size, bidirectional=False, return_sequence=False, nb_layers=1):
         super(RNNEncoder, self).__init__()
 
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.bidirectional = bidirectional
         self.return_sequence = return_sequence
+        self.nb_layers = nb_layers
 
         self.rnn = None
 
+        if self.bidirectional:
+            raise ValueError(f'Bidirectional encoder is not supported right now')
+
     def zero_state(self, batch_size):
         # The axes semantics are (num_layers, batch_size, hidden_dim)
-        nb_layers = 1 if not self.bidirectional else 2
+        nb_layers = self.nb_layers if not self.bidirectional else self.nb_layers * 2
         state_shape = (nb_layers, batch_size, self.hidden_size)
 
         # will work on both GPU and CPU in contrast to just Variable(*state_shape)
@@ -24,8 +28,8 @@ class RNNEncoder(torch.nn.Module):
         return h
 
     def get_hidden(self, cell_state):
-        if self.bidirectional:
-            cell_state = torch.cat(cell_state, dim=-1)
+        if self.nb_layers > 1:
+            cell_state = cell_state[-1]
         else:
             cell_state = cell_state.squeeze(0)
 
@@ -67,17 +71,23 @@ class GRUEncoder(RNNEncoder):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.rnn = torch.nn.GRU(input_size=self.input_size, hidden_size=self.hidden_size, batch_first=True)
+        self.rnn = torch.nn.GRU(
+            input_size=self.input_size, hidden_size=self.hidden_size, bidirectional=self.bidirectional,
+            num_layers=self.nb_layers, batch_first=True
+        )
 
 
 class LSTMEncoder(RNNEncoder):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.rnn = torch.nn.LSTM(input_size=self.input_size, hidden_size=self.hidden_size, batch_first=True)
+        self.rnn = torch.nn.LSTM(
+            input_size=self.input_size, hidden_size=self.hidden_size,
+            bidirectional=self.bidirectional, num_layers=self.nb_layers, batch_first=True
+        )
 
     def get_hidden(self, cell_state):
-        return cell_state[0]
+        return super().get_hidden(cell_state[0])
 
     def zero_state(self, batch_size):
         h0 = super().zero_state(batch_size)

@@ -46,7 +46,7 @@ def get_sequences_lengths(sequences, masking=0, dim=1):
     if len(sequences.size()) > 2:
         sequences = sequences.sum(dim=2)
 
-    masks = torch.ne(sequences, masking)
+    masks = torch.ne(sequences, masking).long()
 
     lengths = masks.sum(dim=dim)
 

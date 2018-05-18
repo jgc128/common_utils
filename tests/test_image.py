@@ -1,6 +1,6 @@
 import numpy as np
 
-from common_utils.image import get_border_size
+from common_utils.cv.utils import get_border_size
 
 
 def test_get_border_size_dividable():
