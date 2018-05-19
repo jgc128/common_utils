@@ -98,6 +98,9 @@ class LossAggregator(Metric):
         self.nb_batches = 0
 
     def update(self, output):
+        if not isinstance(output, (list, tuple)):
+            output = (output,)
+
         for loss_name, loss_value in zip(self.losses_names, output):
             self._epoch_losses[loss_name] += loss_value
 
@@ -165,7 +168,6 @@ class ModelSaver(object):
         if loss_current <= self._best_loss:
             save_weights(self.model, self.filename)
             self._best_loss = loss_current
-
 
 # class SacredInfoCallback(object):
 #     def __init__(self, exp, metric_name):
