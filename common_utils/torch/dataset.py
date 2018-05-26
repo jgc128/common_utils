@@ -10,13 +10,14 @@ class SubsetAttr(torch.utils.data.dataset.Subset):
         super(SubsetAttr, self).__init__(*args, **kwargs)
 
     def __getattr__(self, item):
-        return getattr(self.dataset, item)
+        d = object.__getattribute__(self, 'dataset')
+        return getattr(d, item)
 
-    def __setattr__(self, key, value):
-        if key == 'dataset' or key == 'indices':
-            super().__setattr__(key, value)
-        else:
-            setattr(self.dataset, key, value)
+    # def __setattr__(self, key, value):
+    #     if key == 'dataset' or key == 'indices':
+    #         super().__setattr__(key, value)
+    #     # else:
+    #     # setattr(self.dataset, key, value)
 
 
 def train_val_split(dataset, val_size=0.2, test_size=None):
