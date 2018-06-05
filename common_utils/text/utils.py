@@ -14,13 +14,14 @@ def load_embeddings(filename, top_k=None):
     return word_vectors
 
 
-def create_embeddings_matrix(word_vectors, vocab):
+def create_embeddings_matrix(word_vectors, vocab, pad_token='<pad>'):
     emb_dim = len(next(iter(word_vectors.values())))
     vocab_size = len(vocab)
 
     W_emb = np.zeros((vocab_size, emb_dim))
 
     special_tokens = {t: np.random.uniform(-1.3, 1.3, (emb_dim,)) for t in vocab.special_tokens}
+    special_tokens[pad_token] = np.zeros((emb_dim,))
 
     nb_unk = 0
     for i, t in vocab.id2token.items():
