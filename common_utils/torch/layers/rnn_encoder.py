@@ -1,3 +1,5 @@
+import abc
+
 import torch
 
 from common_utils.torch.helpers import variable
@@ -13,10 +15,14 @@ class RNNEncoder(torch.nn.Module):
         self.return_sequence = return_sequence
         self.nb_layers = nb_layers
 
-        self.rnn = None
+        self.rnn = self.get_rnn_cell()
 
         if self.bidirectional:
             raise ValueError(f'Bidirectional encoder is not supported right now')
+
+    @abc.abstractmethod
+    def get_rnn_cell(self):
+        pass
 
     def zero_state(self, batch_size):
         # The axes semantics are (num_layers, batch_size, hidden_dim)
@@ -71,20 +77,23 @@ class GRUEncoder(RNNEncoder):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.rnn = torch.nn.GRU(
+    def get_rnn_cell(self):
+        rnn = torch.nn.GRU(
             input_size=self.input_size, hidden_size=self.hidden_size, bidirectional=self.bidirectional,
             num_layers=self.nb_layers, batch_first=True
         )
-
+        return rnn
 
 class LSTMEncoder(RNNEncoder):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.rnn = torch.nn.LSTM(
+    def get_rnn_cell(self):
+        rnn = torch.nn.LSTM(
             input_size=self.input_size, hidden_size=self.hidden_size,
             bidirectional=self.bidirectional, num_layers=self.nb_layers, batch_first=True
         )
+        return rnn
 
     def get_hidden(self, cell_state):
         return super().get_hidden(cell_state[0])

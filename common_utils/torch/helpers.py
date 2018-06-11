@@ -1,5 +1,6 @@
 import os
 import logging
+import warnings
 
 import numpy as np
 import torch
@@ -8,6 +9,8 @@ from torch.nn import Parameter
 
 
 def cuda(obj):
+    warnings.warn(f'`cuda` is deprecated, please use `to_device` instead', DeprecationWarning)
+
     if torch.cuda.is_available():
         obj = obj.cuda()
 
@@ -15,6 +18,8 @@ def cuda(obj):
 
 
 def variable(obj, volatile=False):
+    warnings.warn(f'`variable` is deprecated, please use `to_device` instead', DeprecationWarning)
+
     if isinstance(obj, (list, tuple)):
         return [variable(o, volatile=volatile) for o in obj]
 
@@ -23,6 +28,20 @@ def variable(obj, volatile=False):
 
     obj = cuda(obj)
     obj = Variable(obj, volatile=volatile)
+    return obj
+
+
+def to_device(obj, device=None):
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    if isinstance(obj, (list, tuple)):
+        return [to_device(o, device=device) for o in obj]
+
+    if isinstance(obj, np.ndarray):
+        obj = torch.from_numpy(obj)
+
+    obj = obj.to(device)
     return obj
 
 
@@ -38,8 +57,9 @@ def get_trainable_parameters(parameters):
 
 
 def set_variable_repr():
-    Variable.__repr__ = lambda x: f'Variable {tuple(x.size())}'
-    Parameter.__repr__ = lambda x: f'Parameter {tuple(x.size())}'
+    Variable.__repr__ = lambda x: f'Variable {tuple(x.shape)}'
+    Parameter.__repr__ = lambda x: f'Parameter {tuple(x.shape)}'
+    torch.Tensor.__repr__ = lambda x: f'Tensor {tuple(x.shape)}'
 
 
 def get_sequences_lengths(sequences, masking=0, dim=1):
