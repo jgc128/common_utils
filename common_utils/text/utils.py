@@ -20,7 +20,7 @@ def create_embeddings_matrix(word_vectors, vocab, pad_token='<pad>'):
 
     W_emb = np.zeros((vocab_size, emb_dim))
 
-    special_tokens = {t: np.random.uniform(-1.3, 1.3, (emb_dim,)) for t in vocab.special_tokens}
+    special_tokens = {t: np.random.uniform(-0.3, 0.3, (emb_dim,)) for t in vocab.special_tokens}
     special_tokens[pad_token] = np.zeros((emb_dim,))
 
     nb_unk = 0
@@ -31,7 +31,7 @@ def create_embeddings_matrix(word_vectors, vocab, pad_token='<pad>'):
             if t in word_vectors:
                 W_emb[i] = word_vectors[t]
             else:
-                W_emb[i] = np.random.uniform(-1.3, 1.3, emb_dim)
+                W_emb[i] = np.random.uniform(-0.3, 0.3, emb_dim)
                 nb_unk += 1
 
     print(f'Unknown tokens: {nb_unk}')

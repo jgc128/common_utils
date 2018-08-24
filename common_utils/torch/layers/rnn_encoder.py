@@ -2,7 +2,7 @@ import abc
 
 import torch
 
-from common_utils.torch.helpers import variable
+from common_utils.torch.helpers import variable, to_device
 
 
 class RNNEncoder(torch.nn.Module):
@@ -17,9 +17,6 @@ class RNNEncoder(torch.nn.Module):
 
         self.rnn = self.get_rnn_cell()
 
-        if self.bidirectional:
-            raise ValueError(f'Bidirectional encoder is not supported right now')
-
     @abc.abstractmethod
     def get_rnn_cell(self):
         pass
@@ -30,7 +27,7 @@ class RNNEncoder(torch.nn.Module):
         state_shape = (nb_layers, batch_size, self.hidden_size)
 
         # will work on both GPU and CPU in contrast to just Variable(*state_shape)
-        h = variable(torch.zeros(*state_shape))
+        h = to_device(torch.zeros(*state_shape))
         return h
 
     def get_hidden(self, cell_state):
@@ -83,6 +80,7 @@ class GRUEncoder(RNNEncoder):
             num_layers=self.nb_layers, batch_first=True
         )
         return rnn
+
 
 class LSTMEncoder(RNNEncoder):
     def __init__(self, *args, **kwargs):

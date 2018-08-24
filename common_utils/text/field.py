@@ -9,13 +9,15 @@ from common_utils.text.vocab import Vocab
 
 class Field(object):
     def __init__(self, init_token='<sos>', eos_token='<eos>', pad_token='<pad>', unk_token='<unk>',
-                 padding=True, max_len=50, tokenizer=None, vocab=None):
+                 padding=True, max_len=50, tokenizer=None, vocab=None, append_eos=True):
         super(Field, self).__init__()
 
         self.pad_token = pad_token
         self.unk_token = unk_token
         self.init_token = init_token
         self.eos_token = eos_token
+
+        self.append_eos = append_eos
 
         self.padding = padding
         self.tokenizer = tokenizer or self._default_tokenizer
@@ -47,8 +49,11 @@ class Field(object):
         return sentence
 
     def process(self, sentence):
-        sentence = sentence[:self.max_len - 1]
-        sentence.append(self.eos_token)
+        if self.append_eos:
+            sentence = sentence[:self.max_len - 1]
+            sentence.append(self.eos_token)
+        else:
+            sentence = sentence[:self.max_len]
 
         if self.padding:
             needed_pads = self.max_len - len(sentence)
@@ -64,9 +69,12 @@ class Field(object):
 
         return sentence
 
+    def create_vocab(self):
+        self.vocab = Vocab(special_tokens=[self.pad_token, self.unk_token, self.eos_token, self.init_token])
+
     def build_vocab(self, sentences):
         if self.vocab is None:
-            self.vocab = Vocab(special_tokens=[self.pad_token, self.unk_token, self.eos_token, self.init_token])
+            self.create_vocab()
 
         self.vocab.add_documents(sentences)
 
@@ -79,6 +87,9 @@ class Field(object):
 
             if token == self.eos_token:
                 break
+
+            if token in self.vocab.special_tokens:
+                continue
 
             tokens.append(token)
 

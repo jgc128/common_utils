@@ -79,7 +79,12 @@ class GradientClippingUpdateFunction(UpdateFunction):
 
 
 class LossAggregator(Metric):
-    def __init__(self, losses_names, mean=True):
+    DEFAULT_LOSS_NAME = 'loss0'
+
+    def __init__(self, losses_names=None, mean=True, *args, **kwargs):
+        if losses_names is None:
+            losses_names = LossAggregator.DEFAULT_LOSS_NAME
+
         if not isinstance(losses_names, (list, tuple)):
             losses_names = (losses_names,)
 
@@ -89,7 +94,7 @@ class LossAggregator(Metric):
         self._epoch_losses = {}
         self.nb_batches = 0
 
-        super().__init__()
+        super().__init__(*args, **kwargs)
 
     def reset(self):
         for loss_name in self.losses_names:
@@ -111,6 +116,9 @@ class LossAggregator(Metric):
             losses = {l: self._epoch_losses[l] / self.nb_batches for l in self.losses_names}
         else:
             losses = {l: self._epoch_losses[l] for l in self.losses_names}
+
+        if len(self.losses_names) == 1 and self.losses_names[0] == LossAggregator.DEFAULT_LOSS_NAME:
+            losses = losses[LossAggregator.DEFAULT_LOSS_NAME]
 
         return losses
 

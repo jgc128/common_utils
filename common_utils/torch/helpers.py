@@ -78,6 +78,15 @@ def argmax(inputs, dim=-1):
     return indices
 
 
+def softmax_masked(inputs, mask, dim=1, epsilon=0.000001):
+    inputs_exp = torch.exp(inputs)
+    inputs_exp = inputs_exp * mask.float()
+    inputs_exp_sum = inputs_exp.sum(dim=dim)
+    inputs_attention = inputs_exp / (inputs_exp_sum.unsqueeze(dim) + epsilon)
+
+    return inputs_attention
+
+
 def restore_weights(model, filename):
     map_location = None
 
