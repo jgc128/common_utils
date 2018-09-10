@@ -8,16 +8,14 @@ from common_utils.text.vocab import Vocab
 
 
 class Field(object):
-    def __init__(self, init_token='<sos>', eos_token='<eos>', pad_token='<pad>', unk_token='<unk>',
-                 padding=True, max_len=50, tokenizer=None, vocab=None, append_eos=True):
+    def __init__(self, vocab, init_token='<sos>', eos_token='<eos>', pad_token='<pad>', unk_token='<unk>',
+                 padding=True, max_len=50, tokenizer=None):
         super(Field, self).__init__()
 
         self.pad_token = pad_token
         self.unk_token = unk_token
         self.init_token = init_token
         self.eos_token = eos_token
-
-        self.append_eos = append_eos
 
         self.padding = padding
         self.tokenizer = tokenizer or self._default_tokenizer
@@ -49,7 +47,7 @@ class Field(object):
         return sentence
 
     def process(self, sentence):
-        if self.append_eos:
+        if self.eos_token is not None:
             sentence = sentence[:self.max_len - 1]
             sentence.append(self.eos_token)
         else:
@@ -68,17 +66,6 @@ class Field(object):
         sentence = np.array(sentence, dtype=np.long)
 
         return sentence
-
-    def create_vocab(self):
-        self.vocab = Vocab(special_tokens=[self.pad_token, self.unk_token, self.eos_token, self.init_token])
-
-    def build_vocab(self, sentences):
-        if self.vocab is None:
-            self.create_vocab()
-
-        self.vocab.add_documents(sentences)
-
-        logging.info(f'Vocab: {len(self.vocab)}')
 
     def get_sentence_from_indices(self, sentence_indices, join=True):
         tokens = []

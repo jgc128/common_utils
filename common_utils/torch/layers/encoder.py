@@ -12,7 +12,7 @@ class Encoder(torch.nn.Module):
 
         self.embedding = embedding
         self.nb_layers = nb_layers
-        self.dropout_prob = dropout
+        self.dropout = dropout
 
         embedding_dim = embedding.weight.size(1)
 
@@ -22,23 +22,19 @@ class Encoder(torch.nn.Module):
 
         self.encoder = encoder_cell(input_size=embedding_dim, hidden_size=hidden_size, nb_layers=nb_layers)
 
-        self.dropout = None
-        if self.dropout_prob != 0:
-            self.dropout = torch.nn.Dropout(self.dropout_prob)
-
     def forward(self, inputs, inputs_lengths=None):
         if inputs_lengths is None:
             inputs_lengths = get_sequences_lengths(inputs)
 
         encoder_inputs = self.embedding(inputs)
-        if self.dropout is not None:
-            encoder_inputs = self.dropout(encoder_inputs)
+        if self.dropout != 0:
+            encoder_inputs = F.dropout(encoder_inputs, p=self.dropout, training=self.training)
 
         if self.emb_projection is not None:
             encoder_inputs = F.elu(self.emb_projection(encoder_inputs))
 
-            if self.dropout is not None:
-                encoder_inputs = self.dropout(encoder_inputs)
+            if self.dropout != 0:
+                encoder_inputs = F.dropout(encoder_inputs, p=self.dropout, training=self.training)
 
         encoder_hidden = self.encoder(encoder_inputs, inputs_lengths)
 

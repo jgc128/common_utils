@@ -20,7 +20,7 @@ class SequenceReconstructionLoss(torch.nn.Module):
     def __init__(self, ignore_index=-100):
         super(SequenceReconstructionLoss, self).__init__()
 
-        self.xent_loss = torch.nn.CrossEntropyLoss(size_average=True, ignore_index=ignore_index)
+        self.xent_loss = torch.nn.CrossEntropyLoss(reduction='elementwise_mean', ignore_index=ignore_index)
 
     def _calc_sent_xent(self, outputs, targets):
         if len(outputs.shape) > 2:

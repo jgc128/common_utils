@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from common_utils.torch.helpers import variable, argmax
 
@@ -11,7 +12,7 @@ class Decoder(torch.nn.Module):
         self.embedding = embedding
         self.hidden_size = hidden_size
         self.nb_layers = nb_layers
-        self.dropout_prob = dropout
+        self.dropout = dropout
 
         self.max_len = max_len
         self.init_token = init_token
@@ -24,10 +25,6 @@ class Decoder(torch.nn.Module):
         ])
 
         self.out = torch.nn.Linear(hidden_size, vocab_size)
-
-        self.dropout = None
-        if self.dropout_prob != 0:
-            self.dropout = torch.nn.Dropout(self.dropout_prob)
 
     def zero_state(self, batch_size):
         state_shape = (batch_size, self.hidden_size)
@@ -45,6 +42,9 @@ class Decoder(torch.nn.Module):
     def _decoder_timestep(self, inputs, hidden):
         hidden_new = []
         for i, h_i in enumerate(hidden):
+            if self.dropout != 0:
+                inputs = F.dropout(inputs, p=self.dropout, training=self.training)
+
             h_i_new = self.decoder_cells[i](inputs, h_i)
             hidden_new.append(h_i_new)
             inputs = h_i_new
@@ -65,15 +65,13 @@ class Decoder(torch.nn.Module):
         decoder_inputs = self.decoder_initial_inputs(batch_size)
         for di in range(sequence_len):
             decoder_inputs = self.embedding(decoder_inputs)
-            if self.dropout is not None:
-                decoder_inputs = self.dropout(decoder_inputs)
 
             # decoder_hidden = self.decoder(decoder_inputs, decoder_hidden)
             decoder_hidden = self._decoder_timestep(decoder_inputs, decoder_hidden)
 
             decoder_outputs = decoder_hidden[-1]
-            if self.dropout is not None:
-                decoder_outputs = self.dropout(decoder_outputs)
+            if self.dropout != 0:
+                decoder_outputs = F.dropout(decoder_outputs, p=self.dropout, training=self.training)
 
             out = self.out(decoder_outputs)
             outputs.append(out)
